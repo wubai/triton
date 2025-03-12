@@ -24,12 +24,16 @@ def matmul_kernel(a_ptr, b_ptr, c_ptr,
     for k in tl.range(0, tl.cdiv(K , BLOCK_SIZE_K)):
         offsets_ak = offsets_a + (k * BLOCK_SIZE_K + tl.arange(0, BLOCK_SIZE_K))[None, :]
         offsets_bk = offsets_b + (k * BLOCK_SIZE_K * y_stride_0 + tl.arange(0, BLOCK_SIZE_K) * y_stride_0)[:, None]
-        ak = tl.load(offsets_ak)
-        bk = tl.load(offsets_bk)
+        ak = tl.load(offsets_ak, mask = tl.arange(0, BLOCK_SIZE_K)[None, :] < K - k*BLOCK_SIZE_K, other=0.0)
+        bk = tl.load(offsets_bk, mask = tl.arange(0, BLOCK_SIZE_K)[:, None] < K - k*BLOCK_SIZE_K, other=0.0)
         c += tl.dot(ak, bk)
+
+    offs_cm = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
+    offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+    c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
     offsets_c = c_ptr + (pid_m * BLOCK_SIZE_M * z_stride_0 + tl.arange(0, BLOCK_SIZE_M) * z_stride_0)[:, None] + \
             (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N))[None, :]
-    tl.store(offsets_c, c)
+    tl.store(offsets_c, c, mask=c_mask)
 
 
 
